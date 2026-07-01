@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <title>ExamPro | 在线考试系统</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Dynamic Background Mesh -->
+  <div class="bg-mesh">
+    <div class="bg-blob bg-blob-1"></div>
+    <div class="bg-blob bg-blob-2"></div>
+    <div class="bg-blob bg-blob-3"></div>
+  </div>
+
+  <!-- App Container -->
+  <div class="app-container" id="app">
+    <!-- Navigation -->
+    <header class="nav-header" id="navHeader">
+      <div class="nav-glass">
+        <div class="nav-brand">
+          <div class="nav-brand-icon">📝</div>
+          <span>ExamPro</span>
+        </div>
+        <div class="nav-actions">
+          <button class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换主题">
+            <span class="theme-icon">☀️</span>
+          </button>
+          <button class="btn btn-ghost btn-sm" id="navUserBtn" onclick="showPage('history')" style="display:none">
+            📊 成绩
+          </button>
+          <button class="btn btn-secondary btn-sm" id="navLogoutBtn" onclick="handleLogout()" style="display:none">
+            退出
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page: Login -->
+    <div id="page-login" class="auth-container hidden">
+      <div class="auth-card glass-card animate-in">
+        <h1 class="auth-title">欢迎回来</h1>
+        <p class="auth-subtitle">登录你的账号，开始考试</p>
+        <div id="loginAlert"></div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label class="form-label">用户名</label>
+            <input type="text" class="form-input" id="loginUsername" placeholder="请输入用户名" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码</label>
+            <input type="password" class="form-input" id="loginPassword" placeholder="请输入密码" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg" style="width:100%">登 录</button>
+        </form>
+        <div class="auth-footer">
+          还没有账号？<span class="auth-link" onclick="showPage('register')">立即注册</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: Register -->
+    <div id="page-register" class="auth-container hidden">
+      <div class="auth-card glass-card animate-in">
+        <h1 class="auth-title">创建账号</h1>
+        <p class="auth-subtitle">注册即可参加在线考试</p>
+        <div id="registerAlert"></div>
+        <form id="registerForm" onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label class="form-label">用户名</label>
+            <input type="text" class="form-input" id="regUsername" placeholder="请设置用户名" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">养护工区 <span style="color:var(--ios-red)">*</span></label>
+            <input type="text" class="form-input" id="regWorkZone" placeholder="请输入养护工区名称" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">密码</label>
+            <input type="password" class="form-input" id="regPassword" placeholder="请设置密码（至少3位）" required minlength="3">
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg" style="width:100%">注 册</button>
+        </form>
+        <div class="auth-footer">
+          已有账号？<span class="auth-link" onclick="showPage('login')">去登录</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: Exam Hall -->
+    <div id="page-hall" class="hidden">
+      <div class="page-header animate-in">
+        <h1 class="page-title">考试大厅</h1>
+        <p class="page-subtitle">选择一场考试开始作答</p>
+      </div>
+      <div class="exam-grid" id="examList">
+        <div class="skeleton" style="height:200px"></div>
+        <div class="skeleton" style="height:200px"></div>
+        <div class="skeleton" style="height:200px"></div>
+      </div>
+    </div>
+
+    <!-- Page: Exam Taking -->
+    <div id="page-exam" class="hidden">
+      <div class="exam-container animate-in">
+        <div class="exam-header">
+          <div class="flex-between mb-4">
+            <div>
+              <h1 class="page-title" id="examTitle"></h1>
+              <p class="page-subtitle" id="examDesc"></p>
+            </div>
+          </div>
+          <div class="exam-timer" id="examTimer">⏱ 60:00</div>
+          <div class="exam-progress">
+            <div class="exam-progress-bar" id="examProgressBar" style="width:0%"></div>
+          </div>
+        </div>
+        <div id="questionsContainer"></div>
+        <div class="exam-actions">
+          <div class="exam-nav-buttons">
+            <button class="btn btn-secondary" id="btnPrev" onclick="prevQuestion()" disabled>‹ 上一题</button>
+            <button class="btn btn-secondary" id="btnNext" onclick="nextQuestion()">下一题 ›</button>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="submitExam()">提交答卷</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: Result -->
+    <div id="page-result" class="hidden">
+      <div class="exam-container animate-in">
+        <div class="result-card glass-card">
+          <div class="result-icon" id="resultIcon"></div>
+          <h1 class="page-title mb-2" id="resultTitle"></h1>
+          <div class="result-score" id="resultScore"></div>
+          <div class="result-label" id="resultLabel"></div>
+          <div class="result-stats" id="resultStats"></div>
+          <div class="mt-6 flex gap-3" style="justify-content:center">
+            <button class="btn btn-secondary" onclick="showPage('hall')">返回考试大厅</button>
+            <button class="btn btn-primary" id="btnReview" onclick="toggleReview()">查看答题详情</button>
+          </div>
+        </div>
+        <div id="reviewContainer" class="hidden mt-6"></div>
+      </div>
+    </div>
+
+    <!-- Page: History -->
+    <div id="page-history" class="hidden">
+      <div class="page-header animate-in">
+        <h1 class="page-title">我的成绩</h1>
+        <p class="page-subtitle">查看所有历史考试记录</p>
+      </div>
+      <div class="glass-card history-table-wrapper">
+        <table class="history-table" id="historyTable">
+          <thead>
+            <tr>
+              <th>考试名称</th>
+              <th>得分</th>
+              <th>总分</th>
+              <th>通过</th>
+              <th>提交时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody">
+            <tr><td colspan="6" class="text-center" style="padding:40px;color:var(--text-tertiary)">暂无考试记录</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer"></div>
+
+  <!-- Mobile Bottom Navigation (Student) -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav">
+    <button class="mobile-tab-item active" onclick="if(state.token)showPage('hall')">
+      <span class="tab-icon">🏠</span>首页
+    </button>
+    <button class="mobile-tab-item" onclick="if(state.token)showPage('history')">
+      <span class="tab-icon">📊</span>成绩
+    </button>
+    <button class="mobile-tab-item" onclick="toggleTheme()">
+      <span class="tab-icon" id="mobileThemeIcon">☀️</span>主题
+    </button>
+  </nav>
+
+  <!-- Countdown Overlay -->
+  <div class="countdown-overlay hidden" id="countdownOverlay">
+    <div class="countdown-content">
+      <div class="countdown-number" id="countdownNumber">3</div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // App State
+    // ============================================================
+    const API = '';
+    let state = {
+      token: localStorage.getItem('exam_token'),
+      user: JSON.parse(localStorage.getItem('exam_user') || 'null'),
+      currentPage: 'login',
+      exams: [],
+      currentExam: null,
+      currentQuestions: [],
+      currentQuestionIndex: 0,
+      answers: {},
+      submissionId: null,
+      examTimer: null,
+      examTimeLeft: 0,
+      reviewMode: false
+    };
+
+    // ============================================================
+    // Theme Management
+    // ============================================================
+    function initTheme() {
+      const saved = localStorage.getItem('exam_theme') || 'light';
+      applyTheme(saved);
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('exam_theme', theme);
+      const icon = document.querySelector('.theme-icon');
+      if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+      const mobileIcon = document.getElementById('mobileThemeIcon');
+      if (mobileIcon) mobileIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+      if (state.token && state.user) {
+        state.currentPage = 'hall';
+        updateNav();
+        showPage('hall');
+      } else {
+        showPage('login');
+      }
+    });
+
+    // ============================================================
+    // Navigation & UI
+    // ============================================================
+    function showPage(page) {
+      document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
+      const pageEl = document.getElementById('page-' + page);
+      if (pageEl) pageEl.classList.remove('hidden');
+      state.currentPage = page;
+      updateNav();
+
+      // Manage mobile bottom nav visibility
+      const mobileNav = document.getElementById('mobileBottomNav');
+      if (mobileNav) {
+        const hideNav = ['login', 'register', 'exam', 'result'].includes(page);
+        mobileNav.style.display = hideNav ? 'none' : '';
+      }
+
+      // Update bottom nav active state
+      document.querySelectorAll('#mobileBottomNav .mobile-tab-item').forEach(item => {
+        item.classList.remove('active');
+      });
+
+      switch(page) {
+        case 'hall': loadExams(); break;
+        case 'history': loadHistory(); break;
+      }
+    }
+
+    function updateNav() {
+      const isAuth = !!(state.token && state.user);
+      document.getElementById('navUserBtn').style.display = isAuth ? '' : 'none';
+      document.getElementById('navLogoutBtn').style.display = isAuth ? '' : 'none';
+    }
+
+    function showAlert(elementId, message, type) {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        setTimeout(() => { el.innerHTML = ''; }, 4000);
+      }
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ============================================================
+    // API Helpers
+    // ============================================================
+    async function api(path, options = {}) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+      const res = await fetch(API + path, { ...options, headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data;
+    }
+
+    // ============================================================
+    // Auth
+    // ============================================================
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const data = await api('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username, password })
+        });
+        state.token = data.token;
+        state.user = data.user;
+        localStorage.setItem('exam_token', data.token);
+        localStorage.setItem('exam_user', JSON.stringify(data.user));
+        showPage('hall');
+        showToast('登录成功');
+      } catch (err) {
+        showAlert('loginAlert', err.message, 'error');
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const username = document.getElementById('regUsername').value.trim();
+      const workZone = document.getElementById('regWorkZone').value.trim();
+      const password = document.getElementById('regPassword').value;
+
+      try {
+        const data = await api('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ username, work_zone: workZone, password })
+        });
+        state.token = data.token;
+        state.user = data.user;
+        localStorage.setItem('exam_token', data.token);
+        localStorage.setItem('exam_user', JSON.stringify(data.user));
+        showPage('hall');
+        showToast('注册成功！欢迎加入');
+      } catch (err) {
+        showAlert('registerAlert', err.message, 'error');
+      }
+    }
+
+    function handleLogout() {
+      if (state.examTimer) clearInterval(state.examTimer);
+      state.token = null;
+      state.user = null;
+      state.answers = {};
+      localStorage.removeItem('exam_token');
+      localStorage.removeItem('exam_user');
+      updateNav();
+      showPage('login');
+      showToast('已退出登录');
+    }
+
+    // ============================================================
+    // Exam Hall
+    // ============================================================
+    async function loadExams() {
+      try {
+        const data = await api('/api/exams');
+        state.exams = data.exams;
+        renderExamList();
+      } catch (err) {
+        if (err.message.includes('401') || err.message.includes('过期')) {
+          handleLogout();
+        } else {
+          showToast('加载考试列表失败: ' + err.message, 'error');
+        }
+      }
+    }
+
+    function renderExamList() {
+      const container = document.getElementById('examList');
+      if (state.exams.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+          <div class="empty-state-icon">📋</div>
+          <p class="empty-state-text">暂无可用考试</p>
+          <p class="empty-state-hint">请联系管理员创建考试</p>
+        </div>`;
+        return;
+      }
+
+      container.innerHTML = state.exams.map((exam, i) => `
+        <div class="glass-card exam-card magnetic animate-in stagger-${Math.min(i + 1, 5)}" onclick="startExamFlow(${exam.id})">
+          <div class="exam-card-header">
+            <div class="exam-card-icon">📝</div>
+            ${exam.my_submissions > 0
+              ? '<span class="exam-card-badge closed">已提交</span>'
+              : '<span class="exam-card-badge">可参加</span>'}
+          </div>
+          <h3 class="exam-card-title">${escapeHtml(exam.title)}</h3>
+          <p class="exam-card-desc">${escapeHtml(exam.description || '暂无描述')}</p>
+          <div class="exam-card-meta">
+            <div class="exam-meta-item">📋 ${exam.question_count} 题</div>
+            <div class="exam-meta-item">⏱ ${exam.duration_minutes} 分钟</div>
+            <div class="exam-meta-item">💯 ${exam.total_score} 分</div>
+            <div class="exam-meta-item">✅ 及格线 ${exam.passing_score} 分</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ============================================================
+    // Exam Flow
+    // ============================================================
+    async function startExamFlow(examId) {
+      try {
+        const data = await api('/api/exams/' + examId);
+        if (data.alreadySubmitted) {
+          state.submissionId = data.submissionId;
+          loadResult(data.submissionId);
+          return;
+        }
+
+        state.currentExam = data.exam;
+        state.currentQuestions = data.questions;
+        state.currentQuestionIndex = 0;
+        state.answers = {};
+        state.examTimeLeft = state.currentExam.duration_minutes * 60;
+
+        const subData = await api('/api/exams/' + examId + '/start', { method: 'POST' });
+        state.submissionId = subData.submission.id;
+
+        showCountdown(() => {
+          showPage('exam');
+          renderExam();
+          startTimer();
+        });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function showCountdown(callback) {
+      const overlay = document.getElementById('countdownOverlay');
+      const numEl = document.getElementById('countdownNumber');
+      overlay.classList.remove('hidden');
+      let count = 3;
+      numEl.textContent = count;
+
+      const interval = setInterval(() => {
+        count--;
+        if (count <= 0) {
+          clearInterval(interval);
+          overlay.classList.add('hidden');
+          callback();
+        } else {
+          numEl.textContent = count;
+          numEl.style.animation = 'none';
+          void numEl.offsetWidth;
+          numEl.style.animation = '';
+        }
+      }, 800);
+    }
+
+    // ============================================================
+    // Exam Taking
+    // ============================================================
+    function renderExam() {
+      document.getElementById('examTitle').textContent = state.currentExam.title;
+      document.getElementById('examDesc').textContent = state.currentExam.description || '';
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      const q = state.currentQuestions[state.currentQuestionIndex];
+      if (!q) return;
+
+      const container = document.getElementById('questionsContainer');
+      const options = q.options ? JSON.parse(q.options) : [];
+      const totalQuestions = state.currentQuestions.length;
+      const currentNum = state.currentQuestionIndex + 1;
+
+      document.getElementById('examProgressBar').style.width = ((currentNum / totalQuestions) * 100) + '%';
+      document.getElementById('btnPrev').disabled = state.currentQuestionIndex === 0;
+      document.getElementById('btnNext').textContent =
+        state.currentQuestionIndex === totalQuestions - 1 ? '最后一题' : '下一题 ›';
+
+      let optionsHtml = '';
+      if (q.type === 'single_choice') {
+        const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+        optionsHtml = options.map((opt, i) => `
+          <div class="option-item ${state.answers[q.id] === labels[i] ? 'selected' : ''}"
+               onclick="selectOption(${q.id}, '${labels[i]}', 'single')">
+            <div class="option-radio"></div>
+            <span class="option-label">${labels[i]}</span>
+            <span class="option-text">${escapeHtml(opt)}</span>
+          </div>
+        `).join('');
+      } else if (q.type === 'multiple_choice') {
+        const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const selected = (state.answers[q.id] || '').split(',').map(s => s.trim()).filter(Boolean);
+        optionsHtml = options.map((opt, i) => `
+          <div class="option-item ${selected.includes(labels[i]) ? 'selected' : ''}"
+               onclick="selectOption(${q.id}, '${labels[i]}', 'multiple')">
+            <div class="option-checkbox"></div>
+            <span class="option-label">${labels[i]}</span>
+            <span class="option-text">${escapeHtml(opt)}</span>
+          </div>
+        `).join('');
+      } else if (q.type === 'true_false') {
+        optionsHtml = ['正确', '错误'].map((opt, i) => {
+          const val = i === 0 ? 'TRUE' : 'FALSE';
+          return `
+            <div class="option-item ${state.answers[q.id] === val ? 'selected' : ''}"
+                 onclick="selectOption(${q.id}, '${val}', 'single')">
+              <div class="option-radio"></div>
+              <span class="option-label">${i === 0 ? 'A' : 'B'}</span>
+              <span class="option-text">${opt}</span>
+            </div>
+          `;
+        }).join('');
+      } else if (q.type === 'short_answer') {
+        optionsHtml = `
+          <textarea class="short-answer-input"
+                    placeholder="请输入你的答案..."
+                    onchange="selectOption(${q.id}, this.value, 'text')">${escapeHtml(state.answers[q.id] || '')}</textarea>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="question-card glass-card animate-in">
+          <div class="question-number">第 ${currentNum} 题 / 共 ${totalQuestions} 题</div>
+          <div class="question-text">${escapeHtml(q.question_text)}</div>
+          <div class="question-score">本题分值: ${q.score} 分 | 题型: ${getTypeName(q.type)}</div>
+          <div class="option-list">${optionsHtml}</div>
+        </div>
+      `;
+    }
+
+    function selectOption(questionId, value, type) {
+      if (type === 'multiple') {
+        const current = (state.answers[questionId] || '').split(',').map(s => s.trim()).filter(Boolean);
+        const idx = current.indexOf(value);
+        if (idx >= 0) current.splice(idx, 1);
+        else current.push(value);
+        state.answers[questionId] = current.join(',');
+      } else if (type === 'text') {
+        state.answers[questionId] = value;
+      } else {
+        state.answers[questionId] = value;
+      }
+      renderQuestion();
+    }
+
+    function prevQuestion() {
+      if (state.currentQuestionIndex > 0) {
+        state.currentQuestionIndex--;
+        renderQuestion();
+      }
+    }
+
+    function nextQuestion() {
+      if (state.currentQuestionIndex < state.currentQuestions.length - 1) {
+        state.currentQuestionIndex++;
+        renderQuestion();
+      }
+    }
+
+    function getTypeName(type) {
+      const names = { single_choice: '单选题', multiple_choice: '多选题', true_false: '判断题', short_answer: '简答题' };
+      return names[type] || type;
+    }
+
+    // Timer
+    function startTimer() {
+      if (state.examTimer) clearInterval(state.examTimer);
+      updateTimerDisplay();
+
+      state.examTimer = setInterval(() => {
+        state.examTimeLeft--;
+        updateTimerDisplay();
+
+        if (state.examTimeLeft <= 0) {
+          clearInterval(state.examTimer);
+          showToast('考试时间到，系统将自动提交', 'error');
+          setTimeout(() => submitExam(), 2000);
+        }
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const mins = Math.floor(state.examTimeLeft / 60);
+      const secs = state.examTimeLeft % 60;
+      const el = document.getElementById('examTimer');
+      el.textContent = `⏱ ${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+
+      el.classList.remove('warning', 'danger');
+      if (state.examTimeLeft < 300) el.classList.add('danger');
+      else if (state.examTimeLeft < 600) el.classList.add('warning');
+    }
+
+    // Submit
+    async function submitExam() {
+      if (!confirm('确定要提交答卷吗？提交后无法修改。')) return;
+
+      if (state.examTimer) clearInterval(state.examTimer);
+
+      try {
+        const data = await api('/api/submissions/' + state.submissionId + '/submit', {
+          method: 'POST',
+          body: JSON.stringify({ answers: state.answers })
+        });
+        showToast(`提交成功！得分: ${data.totalScore} 分`);
+        loadResult(state.submissionId);
+      } catch (err) {
+        showToast('提交失败: ' + err.message, 'error');
+      }
+    }
+
+    // Results
+    async function loadResult(submissionId) {
+      try {
+        const data = await api('/api/submissions/' + submissionId + '/result');
+        showPage('result');
+        renderResult(data.submission, data.answers);
+      } catch (err) {
+        showToast('加载结果失败: ' + err.message, 'error');
+      }
+    }
+
+    function renderResult(submission, answers) {
+      const isPassed = submission.total_score >= (submission.exam_total_score * 0.6);
+
+      document.getElementById('resultIcon').className = 'result-icon ' + (isPassed ? 'pass' : 'fail');
+      document.getElementById('resultIcon').textContent = isPassed ? '🎉' : '😞';
+      document.getElementById('resultTitle').textContent = isPassed ? '恭喜通过！' : '未通过';
+      document.getElementById('resultScore').textContent = submission.total_score + ' 分';
+      document.getElementById('resultLabel').textContent = `总分: ${submission.exam_total_score} 分 | ${submission.exam_title}`;
+
+      const correctCount = answers.filter(a => a.is_correct).length;
+      document.getElementById('resultStats').innerHTML = `
+        <div>
+          <div class="result-stat-value">${correctCount}/${answers.length}</div>
+          <div class="result-stat-label">正确题数</div>
+        </div>
+        <div>
+          <div class="result-stat-value">${Math.round(correctCount / answers.length * 100)}%</div>
+          <div class="result-stat-label">正确率</div>
+        </div>
+        <div>
+          <div class="result-stat-value">${submission.total_score}/${submission.exam_total_score}</div>
+          <div class="result-stat-label">得分/总分</div>
+        </div>
+      `;
+
+      window._reviewAnswers = answers;
+      state.reviewMode = false;
+      document.getElementById('reviewContainer').classList.add('hidden');
+      document.getElementById('btnReview').textContent = '查看答题详情';
+    }
+
+    function toggleReview() {
+      state.reviewMode = !state.reviewMode;
+      const container = document.getElementById('reviewContainer');
+      const btn = document.getElementById('btnReview');
+
+      if (state.reviewMode) {
+        container.classList.remove('hidden');
+        btn.textContent = '收起答题详情';
+        renderReview();
+      } else {
+        container.classList.add('hidden');
+        btn.textContent = '查看答题详情';
+      }
+    }
+
+    function renderReview() {
+      const container = document.getElementById('reviewContainer');
+      const answers = window._reviewAnswers || [];
+
+      container.innerHTML = answers.map((a, i) => {
+        const options = a.options ? JSON.parse(a.options) : [];
+        let correctDisplay = '';
+        let userDisplay = '';
+
+        if (a.type === 'single_choice' || a.type === 'true_false') {
+          correctDisplay = `正确答案: ${a.correct_answer}`;
+          userDisplay = `你的答案: ${a.user_answer}`;
+        } else if (a.type === 'multiple_choice') {
+          correctDisplay = `正确答案: ${a.correct_answer}`;
+          userDisplay = `你的答案: ${a.user_answer}`;
+        } else {
+          correctDisplay = `参考答案: ${a.correct_answer}`;
+          userDisplay = `你的答案: ${a.user_answer}`;
+        }
+
+        return `
+          <div class="glass-card review-question ${a.is_correct ? 'review-correct' : 'review-incorrect'} animate-in stagger-${Math.min(i+1,5)}">
+            <div class="review-status">${a.is_correct ? '✅ 正确' : '❌ 错误'} (+${a.score_awarded}/${a.question_score}分)</div>
+            <div style="font-weight:500;margin-bottom:12px">${i + 1}. ${escapeHtml(a.question_text)}</div>
+            <div class="correct-answer-display">${correctDisplay}</div>
+            ${!a.is_correct ? `<div class="user-answer-display">${userDisplay}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ============================================================
+    // History
+    // ============================================================
+    async function loadHistory() {
+      try {
+        const data = await api('/api/my-results');
+        const tbody = document.getElementById('historyBody');
+
+        if (data.results.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:40px;color:var(--text-tertiary)">暂无考试记录</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.results.map(r => {
+          const isPassed = r.total_score >= r.passing_score;
+          return `
+            <tr>
+              <td><strong>${escapeHtml(r.exam_title)}</strong></td>
+              <td>
+                <span class="score-badge ${isPassed ? 'pass' : 'fail'}">
+                  ${isPassed ? '✅' : '❌'} ${r.total_score}
+                </span>
+              </td>
+              <td>${r.exam_total_score}</td>
+              <td>${isPassed ? '通过' : '未通过'}</td>
+              <td>${formatDate(r.submitted_at)}</td>
+              <td>
+                <button class="btn btn-sm btn-ghost" onclick="loadResult(${r.id})">查看详情</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        showToast('加载历史记录失败', 'error');
+      }
+    }
+
+    // ============================================================
+    // Utilities
+    // ============================================================
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '--';
+      const d = new Date(dateStr);
+      return d.toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    }
+
+    // Keyboard navigation for exam
+    document.addEventListener('keydown', (e) => {
+      if (state.currentPage !== 'exam') return;
+      if (e.key === 'ArrowLeft') prevQuestion();
+      if (e.key === 'ArrowRight') nextQuestion();
+    });
+
+    // Magnetic effect for cards
+    document.addEventListener('mousemove', (e) => {
+      document.querySelectorAll('.magnetic').forEach(card => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        const distance = Math.sqrt(x * x + y * y);
+        if (distance < 200) {
+          const strength = Math.max(0, 1 - distance / 200) * 4;
+          card.style.transform = `translate(${x * strength * 0.02}px, ${y * strength * 0.02}px) scale(1.02)`;
+        } else {
+          card.style.transform = '';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

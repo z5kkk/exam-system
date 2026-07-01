@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Database (each deployment starts fresh — seed admin on first run)
+exam.db
+
+# Uploads (temporary files)
+uploads/
+
+# Environment
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Tunnel script (local dev only)
+tunnel.js
+exam.db.backup

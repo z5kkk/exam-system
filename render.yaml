@@ -1,0 +1,23 @@
+# Render Blueprint — 公路养护在线考试系统
+# 一键部署: 将代码推送到 GitHub，在 Render 中连接仓库即可自动部署
+
+services:
+  - type: web
+    name: exam-system
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: "3000"
+
+    # Free tier: 512 MB RAM, 0.1 CPU, auto-sleep after 15 min inactivity
+    # Cold start: ~30 seconds on first request after sleep
+    # Monthly: 750 hours free (covers 24/7 for one service)
