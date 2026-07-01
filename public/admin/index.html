@@ -29,6 +29,9 @@
         <button class="nav-item" data-page="exams">
           <span class="nav-item-icon">📋</span> 考试管理
         </button>
+        <button class="nav-item" data-page="banks">
+          <span class="nav-item-icon">📚</span> 题库管理
+        </button>
         <button class="nav-item" data-page="questions">
           <span class="nav-item-icon">📝</span> 题目管理
         </button>
@@ -249,7 +252,7 @@
       }
 
       const titles = {
-        dashboard: '数据概览', exams: '考试管理', questions: '题目管理',
+        dashboard: '数据概览', exams: '考试管理', banks: '题库管理', questions: '题目管理',
         results: '成绩分析', submissions: '成绩管理', users: '用户管理'
       };
       document.getElementById('pageTitle').textContent = titles[page] || page;
@@ -258,6 +261,7 @@
       switch(page) {
         case 'dashboard': loadDashboard(); break;
         case 'exams': loadExamManagement(); break;
+        case 'banks': loadBanksManagement(); break;
         case 'questions': loadQuestionManagement(params); break;
         case 'results': loadResultsAnalysis(params); break;
         case 'submissions': loadSubmissionsManagement(); break;
@@ -473,7 +477,7 @@
                 ? '<tr><td colspan="8" class="text-center" style="padding:40px;color:var(--text-tertiary)">暂无考试，点击右上角创建</td></tr>'
                 : state.exams.map(e => `
                   <tr>
-                    <td><strong>${escapeHtml(e.title)}</strong></td>
+                    <td><strong>${escapeHtml(e.title)}</strong>${e.question_config ? ' <span class="tag tag-published" style="font-size:0.7rem;padding:2px 6px">📚题库抽题</span>' : ''}</td>
                     <td>${e.question_count}</td>
                     <td>${e.duration_minutes} 分钟</td>
                     <td>${e.total_score} / ${e.passing_score}</td>
@@ -498,60 +502,153 @@
 
     function showExamModal(examId = null) {
       const exam = examId ? state.exams.find(e => e.id === examId) : null;
-      document.getElementById('modalContainer').innerHTML = `
-        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-          <div class="modal-content" onclick="event.stopPropagation()">
-            <h2 class="modal-title">${exam ? '编辑考试' : '创建考试'}</h2>
-            <form onsubmit="saveExam(event, ${examId})">
-              <div class="form-group">
-                <label class="form-label">考试标题 *</label>
-                <input type="text" class="form-input" id="examTitle" value="${exam ? escapeHtml(exam.title) : ''}" required placeholder="例如: 2024年期中考试">
-              </div>
-              <div class="form-group">
-                <label class="form-label">考试描述</label>
-                <textarea class="form-textarea" id="examDesc" placeholder="考试的简要描述">${exam ? escapeHtml(exam.description || '') : ''}</textarea>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      let qc = {};
+      try { if (exam && exam.question_config) qc = JSON.parse(exam.question_config); } catch(e) {}
+      const useBank = qc.use_bank || false;
+
+      fetchBanksForDropdown().then(banksHtml => {
+        document.getElementById('modalContainer').innerHTML = `
+          <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+            <div class="modal-content" onclick="event.stopPropagation()" style="max-width:720px">
+              <h2 class="modal-title">${exam ? '编辑考试' : '创建考试'}</h2>
+              <form onsubmit="saveExam(event, ${examId})">
                 <div class="form-group">
-                  <label class="form-label">考试时长（分钟）</label>
-                  <input type="number" class="form-input" id="examDuration" value="${exam ? exam.duration_minutes : 60}" min="1" required>
+                  <label class="form-label">考试标题 *</label>
+                  <input type="text" class="form-input" id="examTitle" value="${exam ? escapeHtml(exam.title) : ''}" required placeholder="例如: 2024年养护安全知识考核">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">总分</label>
-                  <input type="number" class="form-input" id="examTotalScore" value="${exam ? exam.total_score : 100}" min="1" required>
+                  <label class="form-label">考试描述</label>
+                  <textarea class="form-textarea" id="examDesc" placeholder="考试的简要描述">${exam ? escapeHtml(exam.description || '') : ''}</textarea>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">及格分数线</label>
-                  <input type="number" class="form-input" id="examPassingScore" value="${exam ? exam.passing_score : 60}" min="0" required>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+                  <div class="form-group">
+                    <label class="form-label">考试时长（分钟）</label>
+                    <input type="number" class="form-input" id="examDuration" value="${exam ? exam.duration_minutes : 60}" min="1" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">及格分数线</label>
+                    <input type="number" class="form-input" id="examPassingScore" value="${exam ? exam.passing_score : 60}" min="0" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">状态</label>
+                    <select class="form-select" id="examStatus">
+                      <option value="draft" ${exam && exam.status === 'draft' ? 'selected' : ''}>草稿</option>
+                      <option value="published" ${exam && exam.status === 'published' ? 'selected' : ''}>已发布</option>
+                      <option value="closed" ${exam && exam.status === 'closed' ? 'selected' : ''}>已关闭</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">状态</label>
-                  <select class="form-select" id="examStatus">
-                    <option value="draft" ${exam && exam.status === 'draft' ? 'selected' : ''}>草稿</option>
-                    <option value="published" ${exam && exam.status === 'published' ? 'selected' : ''}>已发布</option>
-                    <option value="closed" ${exam && exam.status === 'closed' ? 'selected' : ''}>已关闭</option>
-                  </select>
+                <div style="background:var(--bg-glass);border-radius:16px;padding:20px;margin:16px 0;border:1px solid var(--separator)">
+                  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;margin-bottom:${useBank?'16':'0'}px">
+                    <input type="checkbox" id="examUseBank" ${useBank ? 'checked' : ''} onchange="toggleBankConfig()">
+                    <span>从题库随机抽题（随机抽取，每位考生试卷不同）</span>
+                  </label>
+                  <div id="bankConfigArea" style="display:${useBank?'block':'none'};margin-top:16px">
+                    <p style="font-size:0.8rem;color:var(--text-tertiary);margin-bottom:12px">配置各题型抽取数量，总分自动计算</p>
+                    ${buildBankTypeRow('single_choice', '单选题', qc, banksHtml)}
+                    ${buildBankTypeRow('multiple_choice', '多选题', qc, banksHtml)}
+                    ${buildBankTypeRow('true_false', '判断题', qc, banksHtml)}
+                    ${buildBankTypeRow('short_answer', '简答题', qc, banksHtml)}
+                    <div id="examTotalDisplay" style="margin-top:12px;font-size:0.9rem;color:var(--ios-blue);font-weight:600">
+                      预计总分: <span id="calcTotalScore">${exam ? exam.total_score : 0}</span> 分
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
-                <button type="submit" class="btn btn-primary">${exam ? '保存修改' : '创建考试'}</button>
-              </div>
-            </form>
+                <input type="hidden" id="examTotalScore" value="${exam ? exam.total_score : 100}">
+                <div class="modal-actions">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                  <button type="submit" class="btn btn-primary">${exam ? '保存修改' : '创建考试'}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+        // Bind change events for bank config calculation
+        document.querySelectorAll('.bank-count-input').forEach(el => {
+          el.addEventListener('input', calcBankTotalScore);
+        });
+        document.querySelectorAll('.bank-score-input').forEach(el => {
+          el.addEventListener('input', calcBankTotalScore);
+        });
+      });
+    }
+
+    let _banksCache = null;
+    async function fetchBanksForDropdown() {
+      if (_banksCache) return _banksCache;
+      try {
+        const data = await api('/api/admin/banks');
+        _banksCache = data.banks || [];
+      } catch(e) { _banksCache = []; }
+      return _banksCache;
+    }
+
+    function buildBankTypeRow(type, label, qc, banksCache) {
+      const banks = banksCache || [];
+      const cfg = qc[type] || {};
+      let opts = '<option value="">不使用</option>';
+      banks.forEach(b => {
+        opts += `<option value="${b.id}" ${cfg.bank_id == b.id ? 'selected' : ''}>${escapeHtml(b.title)} (${b.question_count || 0}题)</option>`;
+      });
+      // Also include "手动设置" fallback if no banks
+      if (banks.length === 0) opts = '<option value="">暂无可选题库，请先创建题库</option>';
+      return `
+        <div style="display:grid;grid-template-columns:1fr 80px 80px;gap:10px;align-items:center;margin-bottom:8px">
+          <div>
+            <span style="font-size:0.83rem;color:var(--text-secondary)">${label}</span>
+            <select class="form-select bank-bank-select" data-type="${type}" style="margin-top:4px">${opts}</select>
+          </div>
+          <div>
+            <input type="number" class="form-input bank-count-input" data-type="${type}" value="${cfg.count || 0}" min="0" placeholder="数量" style="text-align:center" ${cfg.bank_id ? '' : 'disabled'}>
+          </div>
+          <div>
+            <input type="number" class="form-input bank-score-input" data-type="${type}" value="${cfg.score_per || 5}" min="1" step="0.5" placeholder="每题分" style="text-align:center" ${cfg.bank_id ? '' : 'disabled'}>
           </div>
         </div>
       `;
     }
 
+    function toggleBankConfig() {
+      const use = document.getElementById('examUseBank').checked;
+      document.getElementById('bankConfigArea').style.display = use ? 'block' : 'none';
+    }
+
+    function calcBankTotalScore() {
+      let total = 0;
+      document.querySelectorAll('.bank-count-input').forEach(el => {
+        const count = parseInt(el.value) || 0;
+        const type = el.dataset.type;
+        const scoreEl = document.querySelector(`.bank-score-input[data-type="${type}"]`);
+        const scorePer = parseFloat(scoreEl?.value) || 5;
+        total += count * scorePer;
+      });
+      document.getElementById('calcTotalScore').textContent = total;
+      document.getElementById('examTotalScore').value = total || 0;
+    }
+
     async function saveExam(e, examId) {
       e.preventDefault();
+      const useBank = document.getElementById('examUseBank')?.checked || false;
+      let questionConfig = null;
+      if (useBank) {
+        questionConfig = { use_bank: true };
+        ['single_choice','multiple_choice','true_false','short_answer'].forEach(t => {
+          const bankSel = document.querySelector(`.bank-bank-select[data-type="${t}"]`);
+          const countEl = document.querySelector(`.bank-count-input[data-type="${t}"]`);
+          const scoreEl = document.querySelector(`.bank-score-input[data-type="${t}"]`);
+          if (bankSel && bankSel.value && countEl && parseInt(countEl.value) > 0) {
+            questionConfig[t] = { bank_id: parseInt(bankSel.value), count: parseInt(countEl.value), score_per: parseFloat(scoreEl?.value) || 5 };
+          }
+        });
+      }
       const data = {
         title: document.getElementById('examTitle').value.trim(),
         description: document.getElementById('examDesc').value.trim(),
         duration_minutes: parseInt(document.getElementById('examDuration').value),
-        total_score: parseInt(document.getElementById('examTotalScore').value),
+        total_score: parseInt(document.getElementById('examTotalScore').value) || 100,
         passing_score: parseInt(document.getElementById('examPassingScore').value),
-        status: document.getElementById('examStatus').value
+        status: document.getElementById('examStatus').value,
+        question_config: questionConfig
       };
       try {
         if (examId) {
@@ -561,11 +658,10 @@
           await api('/api/admin/exams', { method: 'POST', body: JSON.stringify(data) });
           showToast('考试创建成功');
         }
+        _banksCache = null;
         closeModal();
         loadExamManagement();
-      } catch (err) {
-        showToast('操作失败: ' + err.message, 'error');
-      }
+      } catch (err) { showToast('操作失败: ' + err.message, 'error'); }
     }
 
     async function deleteExam(examId) {
@@ -578,6 +674,297 @@
       } catch (err) {
         showToast('删除失败: ' + err.message, 'error');
       }
+    }
+
+    // ============================================================
+    // Question Bank Management
+    // ============================================================
+    async function loadBanksManagement() {
+      try {
+        const data = await api('/api/admin/banks');
+        _banksCache = data.banks;
+        const container = document.getElementById('pageContent');
+        container.innerHTML = `
+          <div style="margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <h2 style="font-size:1.3rem;font-weight:700;color:var(--text-primary)">题库列表</h2>
+            <button class="btn btn-primary" onclick="showBankModal()">+ 创建题库</button>
+          </div>
+          ${data.banks.length === 0 ? `
+            <div class="empty-state" style="text-align:center;padding:60px 0">
+              <div class="empty-state-icon">📚</div>
+              <p class="empty-state-text">暂无题库</p>
+              <p class="empty-state-hint">创建题库后，可在考试中使用随机抽题功能</p>
+              <button class="btn btn-primary" onclick="showBankModal()" style="margin-top:16px">创建第一个题库</button>
+            </div>
+          ` : `
+            <div class="glass-card" style="overflow-x:auto">
+              <table>
+                <thead><tr><th>题库名称</th><th>描述</th><th>题目数</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody>
+                  ${data.banks.map(b => `
+                    <tr>
+                      <td><strong>${escapeHtml(b.title)}</strong></td>
+                      <td>${escapeHtml(b.description || '--')}</td>
+                      <td><span class="tag tag-published">${b.question_count || 0} 题</span></td>
+                      <td>${formatDate(b.created_at)}</td>
+                      <td>
+                        <div class="flex gap-2">
+                          <button class="btn btn-sm btn-secondary" onclick="showBankQuestions(${b.id})">查看题目</button>
+                          <button class="btn btn-sm btn-secondary" onclick="showBankModal(${b.id})">编辑</button>
+                          <button class="btn btn-sm btn-danger" onclick="deleteBank(${b.id})">删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
+        `;
+      } catch (err) { showToast('加载题库失败: ' + err.message, 'error'); }
+    }
+
+    function showBankModal(bankId = null) {
+      const bank = bankId && _banksCache ? _banksCache.find(b => b.id === bankId) : null;
+      document.getElementById('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 class="modal-title">${bank ? '编辑题库' : '创建题库'}</h2>
+            <form onsubmit="saveBank(event, ${bankId})">
+              <div class="form-group">
+                <label class="form-label">题库名称 *</label>
+                <input type="text" class="form-input" id="bankTitle" value="${bank ? escapeHtml(bank.title) : ''}" required placeholder="例如: 养护安全知识题库">
+              </div>
+              <div class="form-group">
+                <label class="form-label">题库描述</label>
+                <textarea class="form-textarea" id="bankDesc">${bank ? escapeHtml(bank.description || '') : ''}</textarea>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button type="submit" class="btn btn-primary">${bank ? '保存' : '创建'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveBank(e, bankId) {
+      e.preventDefault();
+      const data = {
+        title: document.getElementById('bankTitle').value.trim(),
+        description: document.getElementById('bankDesc').value.trim()
+      };
+      try {
+        if (bankId) {
+          await api('/api/admin/banks/' + bankId, { method: 'PUT', body: JSON.stringify(data) });
+          showToast('题库更新成功');
+        } else {
+          await api('/api/admin/banks', { method: 'POST', body: JSON.stringify(data) });
+          showToast('题库创建成功');
+        }
+        _banksCache = null;
+        closeModal();
+        loadBanksManagement();
+      } catch (err) { showToast('操作失败: ' + err.message, 'error'); }
+    }
+
+    async function deleteBank(bankId) {
+      const bank = _banksCache?.find(b => b.id === bankId);
+      if (!confirm(`确定删除题库"${bank?.title || bankId}"吗？所有题目将被删除。`)) return;
+      try {
+        await api('/api/admin/banks/' + bankId, { method: 'DELETE' });
+        showToast('题库已删除');
+        _banksCache = null;
+        loadBanksManagement();
+      } catch (err) { showToast('删除失败: ' + err.message, 'error'); }
+    }
+
+    async function showBankQuestions(bankId) {
+      try {
+        const data = await api('/api/admin/banks/' + bankId + '/questions');
+        const bank = _banksCache?.find(b => b.id === bankId);
+        const container = document.getElementById('pageContent');
+        container.innerHTML = `
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <a href="javascript:navigateTo('banks')" style="color:var(--ios-blue);font-size:0.85rem">← 返回题库</a>
+              <h2 style="font-size:1.3rem;font-weight:700;color:var(--text-primary);margin:4px 0">${escapeHtml(bank?.title || '题库')}</h2>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary" onclick="showBankQuestionModal(${bankId})">+ 添加题目</button>
+              <button class="btn btn-secondary" onclick="showBankImportModal(${bankId})">📥 Excel导入</button>
+            </div>
+          </div>
+          ${data.questions.length === 0 ? `
+            <div class="empty-state" style="text-align:center;padding:60px 0">
+              <div class="empty-state-icon">📝</div>
+              <p class="empty-state-text">暂无题目</p>
+              <button class="btn btn-primary" onclick="showBankQuestionModal(${bankId})" style="margin-top:16px">添加第一道题</button>
+            </div>
+          ` : data.questions.map((q, i) => `
+            <div class="glass-card" style="margin-bottom:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div style="flex:1;min-width:200px">
+                <span class="tag tag-${q.type}" style="margin-right:8px;font-size:0.75rem">${getTypeLabel(q.type)}</span>
+                <span style="font-weight:500">${i+1}. ${escapeHtml(q.question_text)}</span>
+                <span style="color:var(--text-tertiary);font-size:0.8rem;margin-left:8px">${q.score}分</span>
+              </div>
+              <button class="btn btn-sm btn-danger" onclick="deleteBankQuestion(${q.id}, ${bankId})">删除</button>
+            </div>
+          `).join('')}
+        `;
+        // Store current bankId for import
+        window._currentBankId = bankId;
+      } catch (err) { showToast('加载题目失败: ' + err.message, 'error'); }
+    }
+
+    function showBankQuestionModal(bankId) {
+      document.getElementById('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 class="modal-title">添加题目</h2>
+            <form onsubmit="saveBankQuestion(event, ${bankId})">
+              <div class="form-group">
+                <label class="form-label">题型</label>
+                <select class="form-select" id="bqType" onchange="onBqTypeChange()">
+                  <option value="single_choice">单选题</option>
+                  <option value="multiple_choice">多选题</option>
+                  <option value="true_false">判断题</option>
+                  <option value="short_answer">简答题</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">题目内容 *</label>
+                <textarea class="form-textarea" id="bqText" required placeholder="请输入题目内容"></textarea>
+              </div>
+              <div id="bqOptionsArea">
+                <label class="form-label" style="margin-bottom:8px">选项</label>
+                <div id="bqOptionsList"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">正确答案 *</label>
+                <input type="text" class="form-input" id="bqAnswer" required placeholder="单选题: A/B/C/D, 多选题: A,C,D, 判断题: TRUE/FALSE">
+              </div>
+              <div class="form-group">
+                <label class="form-label">分值</label>
+                <input type="number" class="form-input" id="bqScore" value="5" min="1" step="0.5">
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button type="submit" class="btn btn-primary">添加</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+      onBqTypeChange();
+    }
+
+    function onBqTypeChange() {
+      const type = document.getElementById('bqType')?.value;
+      const optsList = document.getElementById('bqOptionsList');
+      const optsArea = document.getElementById('bqOptionsArea');
+      if (!type || !optsList || !optsArea) return;
+      if (type === 'short_answer') {
+        optsArea.style.display = 'none';
+        return;
+      }
+      optsArea.style.display = 'block';
+      if (type === 'true_false') {
+        optsList.innerHTML = '<span style="color:var(--text-tertiary);font-size:0.85rem">判断题选项固定为: 正确 / 错误</span>';
+      } else {
+        optsList.innerHTML = ['A','B','C','D','E','F'].map(l => `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="width:24px;font-weight:600;color:var(--text-secondary)">${l}</span>
+            <input type="text" class="form-input" id="bqOpt${l}" placeholder="选项${l}" style="flex:1">
+          </div>
+        `).join('');
+      }
+    }
+
+    async function saveBankQuestion(e, bankId) {
+      e.preventDefault();
+      const type = document.getElementById('bqType').value;
+      const text = document.getElementById('bqText').value.trim();
+      const answer = document.getElementById('bqAnswer').value.trim();
+      const score = parseFloat(document.getElementById('bqScore').value) || 5;
+      let options = null;
+      if (type === 'single_choice' || type === 'multiple_choice') {
+        const opts = [];
+        ['A','B','C','D','E','F'].forEach(l => {
+          const v = document.getElementById('bqOpt' + l)?.value?.trim();
+          if (v) opts.push(v);
+        });
+        if (opts.length >= 2) options = JSON.stringify(opts);
+      } else if (type === 'true_false') options = JSON.stringify(['正确','错误']);
+      try {
+        await api('/api/admin/banks/' + bankId + '/questions', {
+          method: 'POST',
+          body: JSON.stringify({ type, question_text: text, options, correct_answer: answer, score })
+        });
+        showToast('题目添加成功');
+        closeModal();
+        showBankQuestions(bankId);
+      } catch (err) { showToast('添加失败: ' + err.message, 'error'); }
+    }
+
+    async function deleteBankQuestion(qId, bankId) {
+      if (!confirm('确定删除该题目吗？')) return;
+      try {
+        await api('/api/admin/bank-questions/' + qId, { method: 'DELETE' });
+        showToast('题目已删除');
+        showBankQuestions(bankId);
+      } catch (err) { showToast('删除失败: ' + err.message, 'error'); }
+    }
+
+    function showBankImportModal(bankId) {
+      document.getElementById('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 class="modal-title">Excel 导入题目</h2>
+            <form onsubmit="importBankQuestions(event, ${bankId})">
+              <p style="margin-bottom:12px;color:var(--text-tertiary);font-size:0.85rem">
+                支持列: 题型, 题目, 选项A~F, 正确答案, 分值。题型: 单选/多选/判断/简答
+              </p>
+              <div class="form-group">
+                <label class="form-label">选择 Excel 文件 (.xlsx/.xls)</label>
+                <input type="file" class="form-input" id="bankFile" accept=".xlsx,.xls" required>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button type="submit" class="btn btn-primary">开始导入</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    async function importBankQuestions(e, bankId) {
+      e.preventDefault();
+      const fileInput = document.getElementById('bankFile');
+      if (!fileInput.files[0]) return showToast('请选择文件', 'error');
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      try {
+        const res = await fetch(API + '/api/admin/banks/' + bankId + '/questions/import-excel', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + state.token },
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '导入失败');
+        showToast(`成功导入 ${data.imported} 题` + (data.errors?.length ? `，${data.errors.length}条失败` : ''));
+        if (data.errors) console.warn('Import errors:', data.errors);
+        closeModal();
+        _banksCache = null;
+        showBankQuestions(bankId);
+      } catch (err) { showToast('导入失败: ' + err.message, 'error'); }
+    }
+
+    function getTypeLabel(type) {
+      const m = { single_choice: '单选', multiple_choice: '多选', true_false: '判断', short_answer: '简答' };
+      return m[type] || type;
     }
 
     // ============================================================

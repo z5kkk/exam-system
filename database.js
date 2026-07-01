@@ -44,10 +44,46 @@ async function initDatabase() {
       total_score INTEGER NOT NULL DEFAULT 100,
       passing_score INTEGER NOT NULL DEFAULT 60,
       status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'closed')),
+      question_config TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Schema migration: add question_config if missing
+  try {
+    const cols = queryAll("PRAGMA table_info(exams)");
+    const hasQC = cols.some(c => c.name === 'question_config');
+    if (!hasQC) {
+      db.run("ALTER TABLE exams ADD COLUMN question_config TEXT DEFAULT NULL");
+      console.log('[DB] Added question_config column to exams');
+    }
+  } catch (e) { /* ignore */ }
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS question_banks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bank_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bank_id INTEGER NOT NULL REFERENCES question_banks(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('single_choice', 'multiple_choice', 'true_false', 'short_answer')),
+      question_text TEXT NOT NULL,
+      options TEXT,
+      correct_answer TEXT NOT NULL,
+      score REAL NOT NULL DEFAULT 1,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  db.run("CREATE INDEX IF NOT EXISTS idx_bank_questions_bank ON bank_questions(bank_id)");
 
   db.run(`
     CREATE TABLE IF NOT EXISTS questions (

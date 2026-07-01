@@ -205,6 +205,48 @@ app.post('/api/exams/:id/start', authRequired, (req, res) => {
     return res.status(400).json({ error: '你已经提交过该考试' });
   }
 
+  // --- Random question selection from banks ---
+  let questionConfig = null;
+  try {
+    if (exam.question_config) {
+      questionConfig = JSON.parse(exam.question_config);
+    }
+  } catch (e) { /* ignore */ }
+
+  if (questionConfig && questionConfig.use_bank) {
+    // Check if questions already populated
+    const existingCount = queryOne("SELECT COUNT(*) as count FROM questions WHERE exam_id = ?", [exam.id]);
+    if (!existingCount || existingCount.count === 0) {
+      // Select random questions from banks
+      const types = ['single_choice', 'multiple_choice', 'true_false', 'short_answer'];
+      let sortOrder = 0;
+      const selectedIds = [];
+
+      for (const type of types) {
+        const cfg = questionConfig[type];
+        if (!cfg || !cfg.bank_id || !cfg.count || cfg.count <= 0) continue;
+
+        // Get all matching questions from bank
+        const bankQuestions = queryAll(
+          "SELECT * FROM bank_questions WHERE bank_id = ? AND type = ? ORDER BY RANDOM() LIMIT ?",
+          [cfg.bank_id, type, cfg.count]
+        );
+
+        const scorePer = cfg.score_per || 5;
+        for (const bq of bankQuestions) {
+          run(
+            "INSERT INTO questions (exam_id, type, question_text, options, correct_answer, score, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [exam.id, bq.type, bq.question_text, bq.options, bq.correct_answer, scorePer, ++sortOrder]
+          );
+          const newId = queryOne("SELECT last_insert_rowid() as id");
+          if (newId) selectedIds.push(newId.id);
+        }
+      }
+
+      console.log(`[Exam Start] Selected ${selectedIds.length} questions from banks for exam ${exam.id}`);
+    }
+  }
+
   const result = run(
     "INSERT INTO submissions (user_id, exam_id, status) VALUES (?, ?, 'in_progress')",
     [req.user.id, exam.id]
@@ -308,7 +350,168 @@ app.get('/api/my-results', authRequired, (req, res) => {
 });
 
 // ============================================================
-// Admin Routes - Exams
+// Admin Routes - Question Banks
+// ============================================================
+app.get('/api/admin/banks', authRequired, adminRequired, (req, res) => {
+  const banks = queryAll(`
+    SELECT b.*,
+      (SELECT COUNT(*) FROM bank_questions WHERE bank_id = b.id) as question_count
+    FROM question_banks b
+    ORDER BY b.created_at DESC
+  `);
+  res.json({ banks });
+});
+
+app.post('/api/admin/banks', authRequired, adminRequired, (req, res) => {
+  const { title, description } = req.body;
+  if (!title) return res.status(400).json({ error: '题库名称不能为空' });
+  const result = run(
+    "INSERT INTO question_banks (title, description) VALUES (?, ?)",
+    [title, description || '']
+  );
+  res.json({ id: result, message: '题库创建成功' });
+});
+
+app.put('/api/admin/banks/:id', authRequired, adminRequired, (req, res) => {
+  const { title, description } = req.body;
+  const bank = queryOne("SELECT * FROM question_banks WHERE id = ?", [req.params.id]);
+  if (!bank) return res.status(404).json({ error: '题库不存在' });
+  run("UPDATE question_banks SET title=?, description=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+    [title || bank.title, description !== undefined ? description : bank.description, bank.id]);
+  res.json({ message: '更新成功' });
+});
+
+app.delete('/api/admin/banks/:id', authRequired, adminRequired, (req, res) => {
+  run("DELETE FROM question_banks WHERE id = ?", [req.params.id]);
+  res.json({ message: '删除成功' });
+});
+
+// Bank Questions
+app.get('/api/admin/banks/:bankId/questions', authRequired, adminRequired, (req, res) => {
+  const questions = queryAll(
+    "SELECT * FROM bank_questions WHERE bank_id = ? ORDER BY sort_order, id",
+    [req.params.bankId]
+  );
+  res.json({ questions });
+});
+
+app.post('/api/admin/banks/:bankId/questions', authRequired, adminRequired, (req, res) => {
+  const { type, question_text, options, correct_answer, score } = req.body;
+  if (!type || !question_text || correct_answer === undefined) {
+    return res.status(400).json({ error: '题目类型、内容和正确答案不能为空' });
+  }
+  const bank = queryOne("SELECT id FROM question_banks WHERE id = ?", [req.params.bankId]);
+  if (!bank) return res.status(404).json({ error: '题库不存在' });
+
+  const maxOrder = queryOne(
+    "SELECT MAX(sort_order) as max_order FROM bank_questions WHERE bank_id = ?",
+    [req.params.bankId]
+  );
+
+  const result = run(
+    "INSERT INTO bank_questions (bank_id, type, question_text, options, correct_answer, score, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [
+      req.params.bankId, type, question_text,
+      options ? JSON.stringify(options) : null,
+      String(correct_answer), score || 1, (maxOrder?.max_order || 0) + 1
+    ]
+  );
+  res.json({ id: result, message: '添加成功' });
+});
+
+// Excel import for bank questions
+app.post('/api/admin/banks/:bankId/questions/import-excel', authRequired, adminRequired, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: '请上传Excel文件' });
+    const bank = queryOne("SELECT id FROM question_banks WHERE id = ?", [req.params.bankId]);
+    if (!bank) { fs.unlinkSync(req.file.path); return res.status(404).json({ error: '题库不存在' }); }
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    if (!data.length) { fs.unlinkSync(req.file.path); return res.status(400).json({ error: '文件中没有数据' }); }
+
+    const columnMap = {
+      题型: 'type', 题目类型: 'type', type: 'type',
+      题目: 'question_text', 题干: 'question_text', question: 'question_text',
+      选项A: 'optionA', '选项 A': 'optionA', A: 'optionA',
+      选项B: 'optionB', '选项 B': 'optionB', B: 'optionB',
+      选项C: 'optionC', '选项 C': 'optionC', C: 'optionC',
+      选项D: 'optionD', '选项 D': 'optionD', D: 'optionD',
+      选项E: 'optionE', '选项 E': 'optionE', E: 'optionE',
+      选项F: 'optionF', '选项 F': 'optionF', F: 'optionF',
+      正确答案: 'correct_answer', 答案: 'correct_answer', answer: 'correct_answer',
+      分值: 'score', 分数: 'score', score: 'score'
+    };
+
+    const firstRow = data[0], headers = Object.keys(firstRow), mappedHeaders = {};
+    for (const h of headers) { const m = columnMap[h.trim()]; if (m) mappedHeaders[m] = h; }
+    if (!mappedHeaders.question_text) mappedHeaders.question_text = headers[0];
+
+    const typeAliases = {
+      '单选': 'single_choice', '单选题': 'single_choice', 'single': 'single_choice', 'single_choice': 'single_choice',
+      '多选': 'multiple_choice', '多选题': 'multiple_choice', 'multiple': 'multiple_choice', 'multiple_choice': 'multiple_choice',
+      '判断': 'true_false', '判断题': 'true_false', 'true_false': 'true_false',
+      '简答': 'short_answer', '简答题': 'short_answer', 'short_answer': 'short_answer'
+    };
+
+    const maxOrder = queryOne("SELECT MAX(sort_order) as max_order FROM bank_questions WHERE bank_id = ?", [req.params.bankId]);
+    let currentOrder = (maxOrder?.max_order || 0) + 1;
+    let imported = 0; const errors = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        let type = 'single_choice';
+        if (mappedHeaders.type) {
+          const rawType = String(row[mappedHeaders.type] || '').trim();
+          type = typeAliases[rawType] || 'single_choice';
+          if (!['single_choice','multiple_choice','true_false','short_answer'].includes(type)) type = 'single_choice';
+        }
+        const qText = String(row[mappedHeaders.question_text] || '').trim();
+        if (!qText) { errors.push(`第${i+1}行: 题目为空`); continue; }
+
+        let options = null;
+        if (['single_choice','multiple_choice'].includes(type)) {
+          const opts = [];
+          for (const ok of ['optionA','optionB','optionC','optionD','optionE','optionF']) {
+            if (mappedHeaders[ok]) { const v = String(row[mappedHeaders[ok]] || '').trim(); if (v) opts.push(v); }
+          }
+          if (opts.length >= 2) options = JSON.stringify(opts);
+        } else if (type === 'true_false') options = JSON.stringify(['正确','错误']);
+
+        let correctAnswer = '';
+        if (mappedHeaders.correct_answer) {
+          const raw = String(row[mappedHeaders.correct_answer] || '').trim();
+          if (type === 'single_choice' && options) {
+            correctAnswer = /^[A-Fa-f]$/.test(raw) ? raw.toUpperCase() : raw;
+          } else if (type === 'true_false') {
+            correctAnswer = ['正确','对','true','t','yes','是','1'].includes(raw.toLowerCase()) ? 'TRUE' : 'FALSE';
+          } else correctAnswer = raw;
+        }
+        if (!correctAnswer) { errors.push(`第${i+1}行: 正确答案为空`); continue; }
+
+        const score = parseFloat(row[mappedHeaders.score]) || 5;
+        run("INSERT INTO bank_questions (bank_id, type, question_text, options, correct_answer, score, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [req.params.bankId, type, qText, options, correctAnswer, score, currentOrder++]);
+        imported++;
+      } catch (re) { errors.push(`第${i+1}行: ${re.message}`); }
+    }
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+    res.json({ imported, errors: errors.length > 0 ? errors : undefined, message: `成功导入 ${imported} 题` });
+  } catch (err) {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch (e) {}
+    res.status(500).json({ error: '导入失败: ' + err.message });
+  }
+});
+
+app.delete('/api/admin/bank-questions/:id', authRequired, adminRequired, (req, res) => {
+  run("DELETE FROM bank_questions WHERE id = ?", [req.params.id]);
+  res.json({ message: '删除成功' });
+});
+
+// ============================================================
+// Admin Routes - Exams (Updated with question_config)
 // ============================================================
 app.get('/api/admin/exams', authRequired, adminRequired, (req, res) => {
   const exams = queryAll(`
@@ -323,24 +526,43 @@ app.get('/api/admin/exams', authRequired, adminRequired, (req, res) => {
 });
 
 app.post('/api/admin/exams', authRequired, adminRequired, (req, res) => {
-  const { title, description, duration_minutes, total_score, passing_score, status } = req.body;
+  const { title, description, duration_minutes, passing_score, status, question_config } = req.body;
+  let { total_score } = req.body;
   if (!title) return res.status(400).json({ error: '考试标题不能为空' });
 
+  let qcJson = null;
+  if (question_config) {
+    qcJson = JSON.stringify(question_config);
+    // Auto-calculate total_score if using bank config
+    if (question_config.use_bank) {
+      let calcScore = 0;
+      const types = ['single_choice', 'multiple_choice', 'true_false', 'short_answer'];
+      for (const t of types) {
+        if (question_config[t] && question_config[t].bank_id) {
+          calcScore += (question_config[t].count || 0) * (question_config[t].score_per || 5);
+        }
+      }
+      total_score = calcScore || total_score || 100;
+    }
+  }
+
   const result = run(
-    "INSERT INTO exams (title, description, duration_minutes, total_score, passing_score, status) VALUES (?, ?, ?, ?, ?, ?)",
-    [title, description || '', duration_minutes || 60, total_score || 100, passing_score || 60, status || 'draft']
+    "INSERT INTO exams (title, description, duration_minutes, total_score, passing_score, status, question_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [title, description || '', duration_minutes || 60, total_score || 100, passing_score || 60, status || 'draft', qcJson]
   );
 
   res.json({ id: result, message: '创建成功' });
 });
 
 app.put('/api/admin/exams/:id', authRequired, adminRequired, (req, res) => {
-  const { title, description, duration_minutes, total_score, passing_score, status } = req.body;
+  const { title, description, duration_minutes, total_score, passing_score, status, question_config } = req.body;
   const exam = queryOne("SELECT * FROM exams WHERE id = ?", [req.params.id]);
   if (!exam) return res.status(404).json({ error: '考试不存在' });
 
+  let qcJson = question_config !== undefined ? (question_config ? JSON.stringify(question_config) : null) : exam.question_config;
+
   run(`
-    UPDATE exams SET title=?, description=?, duration_minutes=?, total_score=?, passing_score=?, status=?, updated_at=CURRENT_TIMESTAMP
+    UPDATE exams SET title=?, description=?, duration_minutes=?, total_score=?, passing_score=?, status=?, question_config=?, updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `, [
     title || exam.title,
@@ -349,6 +571,7 @@ app.put('/api/admin/exams/:id', authRequired, adminRequired, (req, res) => {
     total_score || exam.total_score,
     passing_score !== undefined ? passing_score : exam.passing_score,
     status || exam.status,
+    qcJson,
     exam.id
   ]);
 

@@ -104,27 +104,51 @@
 
     <!-- Page: Exam Taking -->
     <div id="page-exam" class="hidden">
-      <div class="exam-container animate-in">
-        <div class="exam-header">
-          <div class="flex-between mb-4">
-            <div>
-              <h1 class="page-title" id="examTitle"></h1>
-              <p class="page-subtitle" id="examDesc"></p>
+      <div class="exam-layout animate-in">
+        <!-- Main Content -->
+        <div class="exam-main">
+          <div class="exam-header">
+            <div class="flex-between mb-4">
+              <div>
+                <h1 class="page-title" id="examTitle"></h1>
+                <p class="page-subtitle" id="examDesc"></p>
+              </div>
+            </div>
+            <div class="exam-timer" id="examTimer">⏱ 60:00</div>
+            <div class="exam-progress">
+              <div class="exam-progress-bar" id="examProgressBar" style="width:0%"></div>
+            </div>
+            <div class="exam-progress-text" id="examProgressText">已答 0/0 题</div>
+          </div>
+          <div id="questionsContainer"></div>
+          <div class="exam-actions">
+            <div class="exam-nav-buttons">
+              <button class="btn btn-secondary" id="btnPrev" onclick="prevQuestion()" disabled>‹ 上一题</button>
+              <button class="btn btn-secondary" id="btnNext" onclick="nextQuestion()">下一题 ›</button>
             </div>
           </div>
-          <div class="exam-timer" id="examTimer">⏱ 60:00</div>
-          <div class="exam-progress">
-            <div class="exam-progress-bar" id="examProgressBar" style="width:0%"></div>
-          </div>
         </div>
-        <div id="questionsContainer"></div>
-        <div class="exam-actions">
-          <div class="exam-nav-buttons">
-            <button class="btn btn-secondary" id="btnPrev" onclick="prevQuestion()" disabled>‹ 上一题</button>
-            <button class="btn btn-secondary" id="btnNext" onclick="nextQuestion()">下一题 ›</button>
+        <!-- Question Navigator Sidebar -->
+        <aside class="exam-sidebar" id="examSidebar">
+          <div class="exam-sidebar-header">
+            <span class="sidebar-title">📋 答题卡</span>
+            <button class="sidebar-toggle-btn" onclick="toggleExamSidebar()" title="收起答题卡">✕</button>
           </div>
-          <button class="btn btn-primary btn-lg" onclick="submitExam()">提交答卷</button>
-        </div>
+          <div class="sidebar-progress-text" id="sidebarProgressText">已答 0/20</div>
+          <div class="sidebar-legend">
+            <span class="legend-item"><span class="legend-dot answered"></span>已答</span>
+            <span class="legend-item"><span class="legend-dot current"></span>当前</span>
+            <span class="legend-item"><span class="legend-dot unanswered"></span>未答</span>
+          </div>
+          <div class="sidebar-grid" id="sidebarGrid"></div>
+          <button class="btn btn-accent sidebar-submit-btn" onclick="submitExam()">
+            📤 提交答卷
+          </button>
+        </aside>
+        <!-- Mobile sidebar toggle -->
+        <button class="exam-sidebar-fab" id="examSidebarFab" onclick="toggleExamSidebar()" title="答题卡">
+          📋
+        </button>
       </div>
     </div>
 
@@ -478,7 +502,74 @@
     function renderExam() {
       document.getElementById('examTitle').textContent = state.currentExam.title;
       document.getElementById('examDesc').textContent = state.currentExam.description || '';
+      renderSidebar();
       renderQuestion();
+      // Responsive: auto-show sidebar on desktop, hide on mobile
+      handleSidebarResponsive();
+    }
+
+    function handleSidebarResponsive() {
+      const sidebar = document.getElementById('examSidebar');
+      const fab = document.getElementById('examSidebarFab');
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        sidebar.classList.add('sidebar-hidden');
+        fab.style.display = '';
+      } else {
+        sidebar.classList.remove('sidebar-hidden');
+        fab.style.display = 'none';
+      }
+    }
+
+    function toggleExamSidebar() {
+      const sidebar = document.getElementById('examSidebar');
+      sidebar.classList.toggle('sidebar-hidden');
+    }
+
+    function jumpToQuestion(index) {
+      state.currentQuestionIndex = index;
+      renderQuestion();
+      updateSidebarSelection(index);
+      // Close sidebar on mobile after jump
+      if (window.innerWidth < 1024) {
+        document.getElementById('examSidebar').classList.add('sidebar-hidden');
+      }
+    }
+
+    function renderSidebar() {
+      const grid = document.getElementById('sidebarGrid');
+      const total = state.currentQuestions.length;
+      const answered = Object.keys(state.answers).filter(k => state.answers[k] !== '' && state.answers[k] !== undefined).length;
+
+      document.getElementById('sidebarProgressText').textContent = `已答 ${answered}/${total}`;
+
+      let html = '';
+      for (let i = 0; i < total; i++) {
+        const q = state.currentQuestions[i];
+        const isAnswered = state.answers[q.id] && state.answers[q.id] !== '';
+        const isCurrent = i === state.currentQuestionIndex;
+        let cls = 'sbar-item';
+        if (isCurrent) cls += ' sbar-current';
+        else if (isAnswered) cls += ' sbar-answered';
+        html += `<button class="${cls}" onclick="jumpToQuestion(${i})" title="第${i+1}题${isAnswered ? '(已答)' : ''}">${i + 1}</button>`;
+      }
+      grid.innerHTML = html;
+    }
+
+    function updateSidebarSelection(index) {
+      document.querySelectorAll('.sbar-item').forEach((el, i) => {
+        el.classList.toggle('sbar-current', i === index);
+      });
+    }
+
+    function updateProgress() {
+      const total = state.currentQuestions.length;
+      const answered = Object.keys(state.answers).filter(k => state.answers[k] !== '' && state.answers[k] !== undefined).length;
+      const progress = total > 0 ? (answered / total) * 100 : 0;
+      document.getElementById('examProgressBar').style.width = progress + '%';
+      document.getElementById('examProgressText').textContent = `已答 ${answered}/${total} 题`;
+      // Also update sidebar
+      document.getElementById('sidebarProgressText').textContent = `已答 ${answered}/${total}`;
     }
 
     function renderQuestion() {
@@ -490,7 +581,8 @@
       const totalQuestions = state.currentQuestions.length;
       const currentNum = state.currentQuestionIndex + 1;
 
-      document.getElementById('examProgressBar').style.width = ((currentNum / totalQuestions) * 100) + '%';
+      updateProgress();
+      updateSidebarSelection(state.currentQuestionIndex);
       document.getElementById('btnPrev').disabled = state.currentQuestionIndex === 0;
       document.getElementById('btnNext').textContent =
         state.currentQuestionIndex === totalQuestions - 1 ? '最后一题' : '下一题 ›';
@@ -559,6 +651,8 @@
       } else {
         state.answers[questionId] = value;
       }
+      renderSidebar();
+      updateProgress();
       renderQuestion();
     }
 
@@ -566,6 +660,7 @@
       if (state.currentQuestionIndex > 0) {
         state.currentQuestionIndex--;
         renderQuestion();
+        updateSidebarSelection(state.currentQuestionIndex);
       }
     }
 
@@ -573,6 +668,7 @@
       if (state.currentQuestionIndex < state.currentQuestions.length - 1) {
         state.currentQuestionIndex++;
         renderQuestion();
+        updateSidebarSelection(state.currentQuestionIndex);
       }
     }
 
@@ -773,6 +869,11 @@
       if (state.currentPage !== 'exam') return;
       if (e.key === 'ArrowLeft') prevQuestion();
       if (e.key === 'ArrowRight') nextQuestion();
+    });
+
+    // Handle window resize for exam sidebar
+    window.addEventListener('resize', () => {
+      if (state.currentPage === 'exam') handleSidebarResponsive();
     });
 
     // Magnetic effect for cards
