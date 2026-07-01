@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const DB_PATH = path.join(__dirname, 'exam.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'exam.db');
 
 let db = null;
 let SQL = null;

@@ -1,0 +1,11 @@
+node_modules
+exam.db
+exam.db.backup
+uploads/
+.git
+.gitignore
+*.md
+.env
+.env.example
+render.yaml
+tunnel.js
