@@ -42,6 +42,22 @@
     <!-- Page: Login -->
     <div id="page-login" class="auth-container hidden">
       <div class="auth-card glass-card animate-in">
+        <div class="auth-illustration">
+          <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" class="auth-svg">
+            <circle cx="100" cy="60" r="40" fill="url(#g1)" opacity="0.15"/>
+            <rect x="60" y="50" width="80" height="55" rx="8" fill="url(#g1)" opacity="0.08" stroke="url(#g1)" stroke-width="1.5"/>
+            <text x="100" y="82" text-anchor="middle" font-size="22" font-weight="bold" fill="url(#g1)">📝</text>
+            <circle cx="70" cy="115" r="6" fill="url(#g1)" opacity="0.2"/>
+            <circle cx="130" cy="115" r="6" fill="url(#g1)" opacity="0.2"/>
+            <rect x="85" y="110" width="30" height="4" rx="2" fill="url(#g1)" opacity="0.15"/>
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="200" y2="160" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="var(--accent)"/>
+                <stop offset="1" stop-color="var(--ios-purple, #af52de)"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
         <h1 class="auth-title">欢迎回来</h1>
         <p class="auth-subtitle">登录你的账号，开始考试</p>
         <div id="loginAlert"></div>
@@ -58,6 +74,8 @@
         </form>
         <div class="auth-footer">
           还没有账号？<span class="auth-link" onclick="showPage('register')">立即注册</span>
+          <span style="margin-left:16px;color:var(--text-tertiary)">|</span>
+          <span class="auth-link" onclick="location.href='/admin'" style="margin-left:8px">管理员入口 →</span>
         </div>
       </div>
     </div>
@@ -65,6 +83,20 @@
     <!-- Page: Register -->
     <div id="page-register" class="auth-container hidden">
       <div class="auth-card glass-card animate-in">
+        <div class="auth-illustration">
+          <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" class="auth-svg">
+            <circle cx="100" cy="55" r="35" fill="url(#g2)" opacity="0.12"/>
+            <path d="M80 95 Q100 70 120 95" stroke="url(#g2)" stroke-width="2" fill="none" opacity="0.3"/>
+            <circle cx="100" cy="105" r="12" fill="url(#g2)" opacity="0.1" stroke="url(#g2)" stroke-width="1.5"/>
+            <text x="100" y="110" text-anchor="middle" font-size="14" fill="url(#g2)">✨</text>
+            <defs>
+              <linearGradient id="g2" x1="0" y1="0" x2="200" y2="160" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="var(--accent)"/>
+                <stop offset="1" stop-color="var(--ios-green, #34c759)"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
         <h1 class="auth-title">创建账号</h1>
         <p class="auth-subtitle">注册即可参加在线考试</p>
         <div id="registerAlert"></div>

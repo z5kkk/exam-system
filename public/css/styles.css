@@ -450,6 +450,24 @@ body {
   text-decoration: underline;
 }
 
+/* Auth Illustration */
+.auth-illustration {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--sp-4);
+  animation: float 6s ease-in-out infinite;
+}
+
+.auth-svg {
+  width: 140px;
+  height: 110px;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
 /* Alert */
 .alert {
   padding: var(--sp-3) var(--sp-4);

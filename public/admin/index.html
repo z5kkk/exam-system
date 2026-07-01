@@ -32,9 +32,6 @@
         <button class="nav-item" data-page="banks">
           <span class="nav-item-icon">📚</span> 题库管理
         </button>
-        <button class="nav-item" data-page="questions">
-          <span class="nav-item-icon">📝</span> 题目管理
-        </button>
         <button class="nav-item" data-page="results">
           <span class="nav-item-icon">📈</span> 成绩分析
         </button>
@@ -80,6 +77,9 @@
     </button>
     <button class="mobile-tab-item" data-page="exams" onclick="navigateTo('exams')">
       <span class="tab-icon">📋</span>考试
+    </button>
+    <button class="mobile-tab-item" data-page="banks" onclick="navigateTo('banks')">
+      <span class="tab-icon">📚</span>题库
     </button>
     <button class="mobile-tab-item" data-page="submissions" onclick="navigateTo('submissions')">
       <span class="tab-icon">📈</span>成绩
@@ -252,7 +252,7 @@
       }
 
       const titles = {
-        dashboard: '数据概览', exams: '考试管理', banks: '题库管理', questions: '题目管理',
+        dashboard: '数据概览', exams: '考试管理', banks: '题库管理',
         results: '成绩分析', submissions: '成绩管理', users: '用户管理'
       };
       document.getElementById('pageTitle').textContent = titles[page] || page;
@@ -262,7 +262,6 @@
         case 'dashboard': loadDashboard(); break;
         case 'exams': loadExamManagement(); break;
         case 'banks': loadBanksManagement(); break;
-        case 'questions': loadQuestionManagement(params); break;
         case 'results': loadResultsAnalysis(params); break;
         case 'submissions': loadSubmissionsManagement(); break;
         case 'users': loadUserManagement(); break;
@@ -486,7 +485,6 @@
                     <td><span class="tag tag-${e.status}">${getStatusName(e.status)}</span></td>
                     <td>
                       <div class="flex gap-2">
-                        <button class="btn btn-sm btn-secondary" onclick="navigateTo('questions',{examId:${e.id}})">题目</button>
                         <button class="btn btn-sm btn-secondary" onclick="showExamModal(${e.id})">编辑</button>
                         <button class="btn btn-sm btn-secondary" onclick="navigateTo('results',{examId:${e.id}})">分析</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteExam(${e.id})">删除</button>
@@ -596,7 +594,7 @@
         <div style="display:grid;grid-template-columns:1fr 80px 80px;gap:10px;align-items:center;margin-bottom:8px">
           <div>
             <span style="font-size:0.83rem;color:var(--text-secondary)">${label}</span>
-            <select class="form-select bank-bank-select" data-type="${type}" style="margin-top:4px">${opts}</select>
+            <select class="form-select bank-bank-select" data-type="${type}" style="margin-top:4px" onchange="onBankSelectChange(this, '${type}')">${opts}</select>
           </div>
           <div>
             <input type="number" class="form-input bank-count-input" data-type="${type}" value="${cfg.count || 0}" min="0" placeholder="数量" style="text-align:center" ${cfg.bank_id ? '' : 'disabled'}>
@@ -626,7 +624,20 @@
       document.getElementById('examTotalScore').value = total || 0;
     }
 
-    async function saveExam(e, examId) {
+
+    function onBankSelectChange(sel, type) {
+      const hasBank = sel.value !== '';
+      const countInput = document.querySelector(`.bank-count-input[data-type="${type}"]`);
+      const scoreInput = document.querySelector(`.bank-score-input[data-type="${type}"]`);
+      if (countInput) countInput.disabled = !hasBank;
+      if (scoreInput) scoreInput.disabled = !hasBank;
+      if (!hasBank) {
+        if (countInput) countInput.value = 0;
+        if (scoreInput) scoreInput.value = 5;
+      }
+      calcBankTotalScore();
+    }
+        async function saveExam(e, examId) {
       e.preventDefault();
       const useBank = document.getElementById('examUseBank')?.checked || false;
       let questionConfig = null;
@@ -968,197 +979,6 @@
     }
 
     // ============================================================
-    // Question Management
-    // ============================================================
-    async function loadQuestionManagement(params = {}) {
-      if (!params.examId && state.exams.length === 0) {
-        try {
-          const data = await api('/api/admin/exams');
-          state.exams = data.exams;
-        } catch(e) {}
-      }
-      const container = document.getElementById('pageContent');
-      if (!params.examId) {
-        container.innerHTML = `
-          <div class="glass-card animate-in" style="padding:40px;text-align:center">
-            <div class="empty-state-icon">📝</div>
-            <p class="empty-state-text">请选择要管理题目的考试</p>
-            <div style="display:flex;flex-direction:column;gap:12px;max-width:500px;margin:24px auto 0">
-              ${state.exams.map(e => `
-                <button class="btn btn-secondary btn-lg" style="width:100%;justify-content:flex-start" onclick="navigateTo('questions',{examId:${e.id}})">
-                  📋 ${escapeHtml(e.title)} <span style="margin-left:auto;color:var(--text-tertiary);font-size:0.8rem">${e.question_count || 0} 题</span>
-                </button>
-              `).join('')}
-              ${state.exams.length === 0 ? '<p style="color:var(--text-tertiary)">暂无考试，请先创建考试</p>' : ''}
-            </div>
-          </div>
-        `;
-        return;
-      }
-      state.currentExamId = params.examId;
-      const exam = state.exams.find(e => e.id == params.examId) || { title: '未知考试' };
-      try {
-        const data = await api('/api/admin/questions/' + params.examId);
-        renderQuestionManagement(exam, data.questions);
-      } catch (err) {
-        showToast('加载题目失败', 'error');
-      }
-    }
-
-    function renderQuestionManagement(exam, questions) {
-      document.getElementById('pageContent').innerHTML = `
-        <div class="flex-between mb-4 animate-in">
-          <div>
-            <span style="color:var(--text-tertiary);cursor:pointer" onclick="navigateTo('questions')">← 返回</span>
-            <strong style="margin-left:8px">${escapeHtml(exam.title)}</strong>
-            <span style="color:var(--text-tertiary);margin-left:8px">(${questions.length} 题)</span>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-secondary" onclick="showImportModal(${state.currentExamId})">📥 批量导入</button>
-            <button class="btn btn-primary" onclick="showQuestionModal()">+ 添加题目</button>
-          </div>
-        </div>
-        <div class="glass-card animate-in" style="overflow-x:auto">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width:50px">#</th><th>题目内容</th><th style="width:80px">题型</th>
-                <th style="width:60px">分值</th><th style="width:120px">正确答案</th><th style="width:120px">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${questions.length === 0
-                ? '<tr><td colspan="6" class="text-center" style="padding:40px;color:var(--text-tertiary)">暂无题目，请添加或导入</td></tr>'
-                : questions.map((q, i) => `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>${escapeHtml(q.question_text.substring(0, 60))}${q.question_text.length > 60 ? '...' : ''}</td>
-                    <td><span class="badge badge-info">${getTypeName(q.type)}</span></td>
-                    <td>${q.score}</td>
-                    <td><code style="font-size:0.75rem;background:var(--bg-tertiary);padding:2px 6px;border-radius:6px">${escapeHtml(String(q.correct_answer).substring(0, 20))}</code></td>
-                    <td>
-                      <button class="btn btn-sm btn-secondary" onclick="showQuestionModal(${q.id})">编辑</button>
-                      <button class="btn btn-sm btn-danger" onclick="deleteQuestion(${q.id})">删除</button>
-                    </td>
-                  </tr>
-                `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    let _questionData = null;
-
-    async function showQuestionModal(qId = null) {
-      if (qId && state.currentExamId) {
-        try {
-          const data = await api('/api/admin/questions/' + state.currentExamId);
-          _questionData = data.questions.find(q => q.id === qId) || {};
-        } catch(e) { _questionData = {}; }
-      }
-      const q = qId ? _questionData : {};
-      document.getElementById('modalContainer').innerHTML = `
-        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-          <div class="modal-content" onclick="event.stopPropagation()">
-            <h2 class="modal-title">${qId ? '编辑题目' : '添加题目'}</h2>
-            <form onsubmit="saveQuestion(event, ${qId || 'null'})">
-              <div class="form-group">
-                <label class="form-label">题型 *</label>
-                <select class="form-select" id="qType" onchange="onQuestionTypeChange()">
-                  <option value="single_choice" ${q.type === 'single_choice' ? 'selected' : ''}>单选题</option>
-                  <option value="multiple_choice" ${q.type === 'multiple_choice' ? 'selected' : ''}>多选题</option>
-                  <option value="true_false" ${q.type === 'true_false' ? 'selected' : ''}>判断题</option>
-                  <option value="short_answer" ${q.type === 'short_answer' ? 'selected' : ''}>简答题</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">题目内容 *</label>
-                <textarea class="form-textarea" id="qText" required placeholder="请输入题目内容">${escapeHtml(q.question_text || '')}</textarea>
-              </div>
-              <div id="optionsContainer">${renderQuestionOptions(q)}</div>
-              <div class="form-group">
-                <label class="form-label">正确答案 *</label>
-                <input type="text" class="form-input" id="qAnswer" value="${escapeHtml(String(q.correct_answer || ''))}" required
-                  placeholder="选择题填选项字母(如 A 或 A,C)，判断题填 TRUE/FALSE">
-              </div>
-              <div class="form-group">
-                <label class="form-label">分值</label>
-                <input type="number" class="form-input" id="qScore" value="${q.score || 1}" min="0.5" step="0.5">
-              </div>
-              <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
-                <button type="submit" class="btn btn-primary">${qId ? '保存修改' : '添加题目'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderQuestionOptions(q) {
-      const type = q.type || 'single_choice';
-      if (type === 'short_answer') return '';
-      let ops = [];
-      try { ops = q.options ? JSON.parse(q.options) : []; } catch(e) { ops = []; }
-      if (type === 'true_false') ops = ['正确', '错误'];
-      const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
-      let html = '<label class="form-label">选项</label>';
-      for (let i = 0; i < 4; i++) {
-        html += `
-          <div class="form-group" style="display:flex;align-items:center;gap:8px">
-            <span style="font-weight:600;min-width:20px;color:var(--text-tertiary)">${labels[i]}</span>
-            <input type="text" class="form-input q-option" data-index="${i}" value="${escapeHtml(ops[i] || '')}" placeholder="选项 ${labels[i]}">
-          </div>
-        `;
-      }
-      return html;
-    }
-
-    function onQuestionTypeChange() {
-      const type = document.getElementById('qType').value;
-      document.getElementById('optionsContainer').innerHTML = renderQuestionOptions({ type });
-    }
-
-    async function saveQuestion(e, qId) {
-      e.preventDefault();
-      const type = document.getElementById('qType').value;
-      const text = document.getElementById('qText').value.trim();
-      const answer = document.getElementById('qAnswer').value.trim();
-      const score = parseFloat(document.getElementById('qScore').value) || 1;
-      let options = null;
-      if (type !== 'short_answer') {
-        const optionInputs = document.querySelectorAll('.q-option');
-        options = Array.from(optionInputs).map(inp => inp.value.trim()).filter(v => v);
-      }
-      try {
-        if (qId) {
-          await api('/api/admin/questions/' + qId, { method: 'DELETE' });
-        }
-        await api('/api/admin/exams/' + state.currentExamId + '/questions', {
-          method: 'POST',
-          body: JSON.stringify({ type, question_text: text, options, correct_answer: answer, score })
-        });
-        showToast(qId ? '题目已更新' : '题目已添加');
-        closeModal();
-        navigateTo('questions', { examId: state.currentExamId });
-      } catch (err) {
-        showToast('保存失败: ' + err.message, 'error');
-      }
-    }
-
-    async function deleteQuestion(qId) {
-      if (!confirm('确定要删除这道题目吗？')) return;
-      try {
-        await api('/api/admin/questions/' + qId, { method: 'DELETE' });
-        showToast('题目已删除');
-        navigateTo('questions', { examId: state.currentExamId });
-      } catch (err) {
-        showToast('删除失败: ' + err.message, 'error');
-      }
-    }
-
-    // ============================================================
     // Batch Import — Excel + JSON
     // ============================================================
     function showImportModal(examId) {
@@ -1335,7 +1155,7 @@
         });
         showToast(result.message);
         closeModal();
-        navigateTo('questions', { examId });
+        navigateTo('exams');
       } catch (err) {
         showToast('导入失败: ' + err.message, 'error');
       }
